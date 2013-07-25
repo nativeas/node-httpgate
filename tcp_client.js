@@ -1,45 +1,47 @@
 var net = require('net');
-//var host = '127.0.0.1'
-var host = '172.16.2.57';
-var port = 8001;
+var reslist = {};
 
-var client = null;
+var client = new net.Socket();
 
-function start() {
-	client = new net.Socket();
-	client.connect(port, host, function() {
-
-		console.log("connectd to host");
-		
+function start(ip, port) {
+	console.log(ip, port)
+	client.on('error', function() {
+		console.log("ERROR: socket error!");
+	})
+	client.connect(port, ip, function() {
+		console.log("Socket Client Started!");
+		console.log("Socket Client connectd to host: " + ip + ":" + port);
 	});
 	client.on('data', function(data) {
-
-		console.log("data:" + data);
-		var obj = reslist[data];
-		//console.log(obj)
-		if(obj!=null){
-			obj.send(data);
-			
-			reslist[data] = null;
-		}
+		decode(data);
 	})
 }
 
 
-var reslist = {}
-function send(req,res,guid) {
-	 reslist[guid] =  res;
-	 var sob = encode(guid,new Buffer([1,23,3,4,5,6,7,3,4,4]))
-	 console.log(sob.length);
-	 console.log(client.write(sob));
 
+function send(req, res, guid) {
+	reslist[guid] = res;
+	var sob = encode(guid, new Buffer([1, 23, 3, 4, 5, 6, 7, 3, 4, 4]))
+	client.write(sob);
 }
 
-var st = require("./stest")
-function encode(guid,data){
-	return st.pack(guid,data);
+var st = require("./binaryUtil");
+
+function encode(guid, data) {
+	return st.pack(guid, data);
 }
 
+function decode(data) {
+	st.unpack(data, callBack);
+}
+
+function callBack(guid, data) {
+	var response = reslist[guid];
+	if (response == null)
+		return;
+	response.send(data);
+	delete reslist[guid]
+}
 
 exports.start = start;
 exports.send = send;
