@@ -24,7 +24,7 @@ function packRemoteInternal(guid, buf) {
 	def.byte(1);
 	var buffxx = def.write();
 	var guidbuffer = new Buffer(48);
-	guidbuffer.write(guid,0,36);
+	guidbuffer.write(guid, 0, 36);
 	result = bufferAppend(buffxx, guidbuffer)
 	var buflen = ls.def({
 		littleEndian: true
@@ -46,30 +46,64 @@ function bufferAppend(buf1, buf2) {
 var _internalBuffer = new Buffer(0);
 
 var unpackCallBack = null;
-function unPackRemote(data,unpackcb) {
+var replyHeartBeatCallBack = null;
+
+function unPackRemote(data, unpackcb, replyHeartBeat) {
 	unpackCallBack = unpackcb;
+	replyHeartBeatCallBack = replyHeartBeat;
 	_internalBuffer = bufferAppend(_internalBuffer, data);
 	var avaiable = true;
-	do{
+	do {
 		avaiable = unPackInternal();
-	}while(avaiable);
+	} while (avaiable);
 }
 
 function unPackInternal() {
-	if(_internalBuffer.length<4)
+	if (_internalBuffer.length < 4)
 		return false;
 	var cmdLen = _internalBuffer.readUInt32LE(0);
-	if (cmdLen + 6 > _internalBuffer.length)
+	var fullLen =  cmdLen+6 + 8-(cmdLen+ 6)%8;
+	console.log('cmdLen:',cmdLen);
+	console.log('Full:',fullLen);
+	if (fullLen > _internalBuffer.length)
 		return false;
+
 	var pkdata = _internalBuffer.slice(0, cmdLen + 6);
-	var guid = pkdata.slice(8,8+36).toString();
-	var clientData = pkdata.slice(8+48);
-	var tmp = _internalBuffer.slice(cmdLen + 8);
+	if (pkdata[6] == 0xff && pkdata[7] == 0xfe) {
+		console.log('do heat')
+		replyHeatBeat();
+
+	} else {
+		var guid = pkdata.slice(8, 8 + 36).toString();
+		var clientData = pkdata.slice(8 + 48+4);
+		unpackCallBack(guid, clientData);
+	}
+
+	var tmp = _internalBuffer.slice(fullLen);
 	_internalBuffer = tmp;
-	unpackCallBack(guid,clientData);
+	
 	return true;
 }
 
-exports.pack = packRemote;
+function replyHeatBeat(){
+	var def = ls.def({
+		littleEndian: true
+	});
+	def.int32(4)
+		.byte(0)
+		.byte(0)
+		.byte(0xff)
+		.byte(0xfe)
+		.byte(1)
+		.byte(1)
+		.int32(0)
+		.byte(0)
+		.byte(0);
+	var data = def.write();
+	replyHeartBeatCallBack(data);
 
+}
+
+exports.pack = packRemote;
+exports.bufferAppend = bufferAppend;
 exports.unpack = unPackRemote;

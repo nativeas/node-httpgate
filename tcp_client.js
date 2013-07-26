@@ -1,6 +1,6 @@
 var net = require('net');
 var reslist = {};
-
+var bu = require('./binaryUtil');
 var client = new net.Socket();
 
 function start(ip, port) {
@@ -13,6 +13,7 @@ function start(ip, port) {
 		console.log("Socket Client connectd to host: " + ip + ":" + port);
 	});
 	client.on('data', function(data) {
+		console.log('recv', data.length);
 		decode(data);
 	})
 }
@@ -20,9 +21,25 @@ function start(ip, port) {
 
 
 function send(req, res, guid) {
-	reslist[guid] = res;
-	var sob = encode(guid, new Buffer([1, 23, 3, 4, 5, 6, 7, 3, 4, 4]))
-	client.write(sob);
+
+	var tmp = new Buffer(0);
+
+	req.on("data", function(data) {
+		tmp = bu.bufferAppend(tmp, data);
+	});
+	req.on('end', function() {
+		console.log("post end");
+		reslist[guid] = res;
+		var sob = encode(guid, tmp);
+		console.log("SEND GUID:", guid);
+		console.log("SEND data:", tmp);
+		console.log("send data length", sob.length)
+		console.log(client.write(sob));
+		// client.write(sob);
+		console.log("send complet!");
+	});
+
+
 }
 
 var st = require("./binaryUtil");
@@ -32,15 +49,25 @@ function encode(guid, data) {
 }
 
 function decode(data) {
-	st.unpack(data, callBack);
+	console.log('decode',data);
+	st.unpack(data, callBack, replyHeartBeat);
 }
 
 function callBack(guid, data) {
+	console.log("callback",guid,data);
 	var response = reslist[guid];
 	if (response == null)
 		return;
+	console.log("Callback GUID", guid)
+	console.log("Callback", data)
 	response.send(data);
 	delete reslist[guid]
+}
+
+function replyHeartBeat(data) {
+	console.log("replyHeartBeat", data.length);
+	console.log(data);
+	client.write(data);
 }
 
 exports.start = start;
